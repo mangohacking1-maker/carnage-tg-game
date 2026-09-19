@@ -23,7 +23,7 @@ const bot = new TelegramBot(token, { polling: true });
 
 const activeFights = new Map();
 const activeExpeditions = new Map();
-const walletState = new Map(); // Хранит состояние ожидания ввода кошелька
+const walletState = new Map();
 
 const locales = {
   ru: {
@@ -37,7 +37,7 @@ const locales = {
     wastelands_desc: "🏜 *ПУСТОШИ*\n💰 Авто-фарм Золота и Металлолома.\n🎁 Шанс 15% найти редкое Ядро Яутжа!",
     btn_claim: "🎒 Собрать добычу",
     btn_start_farm: "🚀 Запустить авто-фарм",
-    btn_status: "📊 Статус",
+    btn_status: "📊 Status",
     farm_started: "🚀 *Фарм запущен!* Выходи из бота, выключай телефон — процесс идет на сервере.",
     too_early: "⏳ Прошло слишком мало времени! Пустоши еще не принесли плодов.",
     loot_report: (gold, scrap, epic) => `🎒 *ДОБЫЧА ИЗ ПУСТОШЕЙ:* \n💰 Золото: *+${gold}*\n⚙️ Металлолом: *+${scrap}*${epic ? '\n🔥 *СЮРПРИЗ:* Найдено *⚡ Plasma Core Яутжа*!' : ''}\n\nДанные сохранены в базу.`,
@@ -73,36 +73,148 @@ const locales = {
 };
 
 async function getOrCreatePlayer(tgId, username) {
-  let { data: player, error } = await supabase
-    .from('players')
-    .select('*')
-    .eq('tg_id', tgId)
-    .single();
-
-  if (error && error.code === 'PGRST116') {
-    const { data: newPlayer, error: createError } = await supabase
+  try {
+    let { data: player, error } = await supabase
       .from('players')
-      .insert([{ tg_id: tgId, username: username, language: 'ru' }])
-      .select()
+      .select('*')
+      .eq('tg_id', tgId)
       .single();
-    
-    if (createError) console.error("DB_ERROR:", createError);
-    return newPlayer;
+
+    if (error && error.code === 'PGRST116') {
+      const { data: newPlayer, error: createError } = await supabase
+        .from('players')
+        .insert([{ tg_id: tgId, username: username, language: 'ru' }])
+        .select()
+        .single();
+      
+      if (createError) console.error("DB_ERROR:", createError);
+      return newPlayer;
+    }
+    return player;
+  } catch (e) {
+    console.error("SYSTEM_ERROR_DB:", e);
+    return null;
   }
-  return player;
 }
 
-// Слушатель обычных ТЕКСТОВЫХ сообщений (для ловли адреса кошелька)
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
   const text = msg.text;
 
-  if (!text || text.startsWith('/')) return; // Игнорируем команды вроде /start
+  if (!text || text.startsWith('/')) return;
 
   if (walletState.get(chatId) === 'awaiting_wallet') {
     const player = await getOrCreatePlayer(chatId, msg.from.username || 'Warbound');
     const lang = player ? (player.language || 'ru') : 'ru';
     const ui = locales[lang];
+
+    const cleanText = text.trim();
+    const isTonAddress = /^(EQ|UQ)[A-Za-z0-9_-]{42,46}$/.test(cleanText);
+
+    if (isTonAddress) {
+      walletState.delete(chatId);
+      await supabase.from('players').update({ wallet_address: cleanText }).eq('tg_id', chatId);
+
+      bot.sendMessage(chatId, ui.wallet_success, {
+        parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[{ text: ui.btn_menu, callback_data: 'back_to_main' }]] }
+      });
+    } else {
+      bot.sendMessage(chatId, ui.wallet_invalid, { parse_mode: 'Markdown' });
+    }
+  }
+});
+
+bot.onText(/\/start/, async (msg) => {
+  const chatId = msg.chat.id;
+  const username = msg.from.username || 'Warbound';
+  
+  activeFights.delete(chatId);
+  walletState.delete(chatId);
+  
+  const player = await getOrCreatePlayer(chatId, username);
+  const lang = player ? (player.language || 'ru') : 'ru';
+  const text = locales[lang];
+  
+  bot.sendMessage(chatId, text.welcome(username, player ? player.gold : 0, player ? player.scrap : 0, player ? player.plasma_cores : 0, player ? player.wallet_address : null), {
+    parse_mode: 'Markdown',
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: text.btn_arena, callback_data: 'choose_weapon' }],
+        [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }],
+        [{ text: text.btn_wallet, callback_data: 'menu_wallet' }],
+        [{ text: text.btn_lang, callback_data: 'toggle_language' }]
+      ]
+    }
+  });
+});
+
+bot.on('callback_query', async (query) => {
+  const chatId = query.message.chat.id;
+  const messageId = query.message.message_id;
+  const data = query.data;
+
+  bot.answerCallbackQuery(query.id).catch(() => {});
+
+  const player = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+  let lang = player ? (player.language || 'ru') : 'ru';
+  let text = locales[lang];
+
+  if (data === 'toggle_language') {
+    const newLang = lang === 'ru' ? 'en' : 'ru';
+    await supabase.from('players').update({ language: newLang }).eq('tg_id', chatId);
+    
+    text = locales[newLang];
+    
+    let menuMsg = text.welcome(query.from.username || 'Warbound', player ? player.gold : 0, player ? player.scrap : 0, player ? player.plasma_cores : 0, player ? player.wallet_address : null);
+    bot.editMessageText(menuMsg, {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: text.btn_arena, callback_data: 'choose_weapon' }],
+          [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }],
+          [{ text: text.btn_wallet, callback_data: 'menu_wallet' }],
+          [{ text: text.btn_lang, callback_data: 'toggle_language' }]
+        ]
+      }
+    }).catch(() => {});
+    return;
+  }
+
+  if (data === 'menu_wallet') {
+    walletState.set(chatId, 'awaiting_wallet');
+    bot.editMessageText(text.wallet_menu(player ? player.wallet_address : null), {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] }
+    }).catch(() => {});
+  }
+
+  if (data === 'menu_wastelands') {
+    walletState.delete(chatId);
+    if (activeExpeditions.has(chatId)) {
+      const exp = activeExpeditions.get(chatId);
+      const mins = Math.floor((Date.now() - exp.startTime) / 60000);
+      bot.editMessageText(text.wastelands_farming(mins), {
+        chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+        reply_markup: { inline_keyboard: [[{ text: text.btn_claim, callback_data: 'claim_loot' }]] }
+      }).catch(() => {});
+    } else {
+      bot.editMessageText(text.wastelands_desc, {
+        chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: text.btn_start_farm, callback_data: 'start_expedition' }],
+            [{ text: text.btn_menu, callback_data: 'back_to_main' }]
+          ]
+        }
+      }).catch(() => {});
+    }
+  }
+
+  if (data === 'start_expedition') {
+    activeExpeditions.set(chatId, { startTime: Date.now() });
+    bot.editMessageText(text.farm_started, {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
 
     // Базовая хакерская проверка TON адреса (длина 44-48 символов, старт с EQ или UQ)
     const cleanText = text.trim();
