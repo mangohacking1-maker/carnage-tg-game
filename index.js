@@ -53,7 +53,8 @@ const locales = {
     wallet_menu: (wallet) => wallet ? '💎 *ТВОЙ TON КОШЕЛЕК:* \n`' + wallet + '`\n\nТы можешь отправить новый адрес сообщением, чтобы изменить его.' : '💎 *ПОДКЛЮЧЕНИЕ TON КОШЕЛЬКА* \n\nОтправь мне адрес своего TON кошелька (например, из Tonkeeper) обычным текстовым сообщением в ответ на это меню.',
     wallet_success: "✅ *Успех!* Твой TON кошелек успешно привязан и сохранен в вечную базу данных!",
     wallet_invalid: "❌ *Ошибка!* Неверный формат TON адреса. Адрес должен начинаться на EQ или UQ и содержать около 48 символов. Попробуй еще раз!"
-  },
+  ',
+
   en: {
     welcome: (name, gold, scrap, cores, wallet) => {
       let wStr = wallet ? '💎 TON Wallet: ' + wallet.slice(0,6) + '...' + wallet.slice(-6) + '\n' : '💎 Wallet: Not connected\n';
@@ -219,4 +220,69 @@ bot.on('callback_query', async (query) => {
   if (data === 'start_expedition') {
     activeExpeditions.set(chatId, { startTime: Date.now() });
     bot.editMessageText(text.farm_started, {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: [[{ text: text.btn_status, callback_data: 'menu_wastelands' }]] }
+    }).catch(() => {});
+  }
+
+  if (data === 'claim_loot') {
+    const exp = activeExpeditions.get(chatId);
+    if (!exp) return;
+
+    const secs = Math.floor((Date.now() - exp.startTime) / 1000);
+    if (secs < 5) return bot.sendMessage(chatId, text.too_early);
+
+    const goldEarned = secs * 2;
+    const scrapEarned = secs * 5;
+    const isEpic = Math.random() < 0.15;
+    const coresEarned = isEpic ? 1 : 0;
+
+    activeExpeditions.delete(chatId);
+
+    await supabase
+      .from('players')
+      .update({
+        gold: ((player ? player.gold : 0) || 0) + goldEarned,
+        scrap: ((player ? player.scrap : 0) || 0) + scrapEarned,
+        plasma_cores: ((player ? player.plasma_cores : 0) || 0) + coresEarned
+      })
+      .eq('tg_id', chatId);
+
+    bot.sendMessage(chatId, text.loot_report(goldEarned, scrapEarned, isEpic), {
+      parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] }
+    });
+  }
+
+  if (data === 'choose_weapon') {
+    walletState.delete(chatId);
+    bot.editMessageText(text.choose_weapon, {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: text.btn_bow, callback_data: 'w_bow' }],
+          [{ text: text.btn_claws, callback_data: 'w_claws' }]
+        ]
+      }
+    }).catch(() => {});
+  }
+
+  if (data === 'back_to_main') {
+    activeFights.delete(chatId);
+    walletState.delete(chatId);
+    const freshPlayer = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+    
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', freshPlayer ? freshPlayer.gold : 0, freshPlayer ? freshPlayer.scrap : 0, freshPlayer ? freshPlayer.plasma_cores : 0, freshPlayer ? freshPlayer.wallet_address : null), {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: text.btn_arena, callback_data: 'choose_weapon' }],
+          [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }],
+          [{ text: text.btn_wallet, callback_data: 'menu_wallet' }],
+          [{ text: text.btn_lang, callback_data: 'toggle_language' }]
+        ]
+      }
+    }).catch(() => {});
+  }
+});
   
