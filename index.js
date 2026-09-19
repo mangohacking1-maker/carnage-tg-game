@@ -7,7 +7,6 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_KEY;
 
 if (!token || !supabaseUrl || !supabaseKey) {
-  console.error("❌ CRITICAL: Environment variables missing!");
   process.exit(1);
 }
 
@@ -73,28 +72,21 @@ const locales = {
 };
 
 async function getOrCreatePlayer(tgId, username) {
-  try {
-    let { data: player, error } = await supabase
-      .from('players')
-      .select('*')
-      .eq('tg_id', tgId)
-      .single();
+  let { data: player, error } = await supabase
+    .from('players')
+    .select('*')
+    .eq('tg_id', tgId)
+    .single();
 
-    if (error && error.code === 'PGRST116') {
-      const { data: newPlayer, error: createError } = await supabase
-        .from('players')
-        .insert([{ tg_id: tgId, username: username, language: 'ru' }])
-        .select()
-        .single();
-      
-      if (createError) console.error("DB_ERROR:", createError);
-      return newPlayer;
-    }
-    return player;
-  } catch (e) {
-    console.error("SYSTEM_ERROR_DB:", e);
-    return null;
+  if (error && error.code === 'PGRST116') {
+    const { data: newPlayer } = await supabase
+      .from('players')
+      .insert([{ tg_id: tgId, username: username, language: 'ru' }])
+      .select()
+      .single();
+    return newPlayer;
   }
+  return player;
 }
 
 bot.on('message', async (msg) => {
@@ -163,7 +155,6 @@ bot.on('callback_query', async (query) => {
   if (data === 'toggle_language') {
     const newLang = lang === 'ru' ? 'en' : 'ru';
     await supabase.from('players').update({ language: newLang }).eq('tg_id', chatId);
-    
     text = locales[newLang];
     
     let menuMsg = text.welcome(query.from.username || 'Warbound', player ? player.gold : 0, player ? player.scrap : 0, player ? player.plasma_cores : 0, player ? player.wallet_address : null);
@@ -208,6 +199,22 @@ bot.on('callback_query', async (query) => {
           ]
         }
       }).catch(() => {});
+    }
+  }
+
+  if (data === 'start_expedition') {
+    activeExpeditions.set(chatId, { startTime: Date.now() });
+    bot.editMessageText(text.farm_started, {
+      chat_id: chatId, message_id: messageId, parse_mode: 'Markdown',
+      reply_markup: { inline_keyboard: [[{ text: text.btn_status, callback_data: 'menu_wastelands' }]] }
+    }).catch(() => {});
+  }
+
+  if (data === 'claim_loot') {
+    const exp = activeExpeditions.get(chatId);
+    if (!exp) return;
+
+    const secs = Math.floor((Date.now() - exp.startTime) / 1000);
     }
   }
 
