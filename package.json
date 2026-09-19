@@ -1,12 +1,13 @@
 {
   "name": "arena-of-honor-bot",
-  "version": "1.0.0",
-  "description": "Сервер для Telegram MMORPG Арена Чести",
+  "version": "2.0.0",
+  "description": "Arena of Honor Core Combat & Idle Engine",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0"
+    "node-telegram-bot-api": "^0.66.0",
+    "@supabase/supabase-js": "^2.45.4"
   }
 }
