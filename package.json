@@ -1,0 +1,12 @@
+{
+  "name": "arena-of-honor-bot",
+  "version": "1.0.0",
+  "description": "Сервер для Telegram MMORPG Арена Чести",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0"
+  }
+}
