@@ -302,3 +302,48 @@ bot.on('callback_query', async (query) => {
 
     const statusReport = lang === 'ru' 
       ? `\n\n📊 *СТАТУС БОЯ:*\n❤️ Твое здоровье: *${battle.playerHp} HP*\n👽 Здоровье Хищника: *${battle.predatorHp} HP*`
+    // Проверяем итоги раунда: умер ли Хищник?
+    if (battle.predatorHp <= 0) {
+      bot.editMessageText(`${log.join('\n')}\n\n${text.arena_win}`, { 
+        chat_id: chatId, 
+        message_id: messageId, 
+        parse_mode: 'Markdown', 
+        reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } 
+      });
+      activeBattles.delete(chatId);
+    } 
+    // Умер ли игрок?
+    else if (battle.playerHp <= 0) {
+      bot.editMessageText(`${log.join('\n')}\n\n${text.arena_lose}`, { 
+        chat_id: chatId, 
+        message_id: messageId, 
+        parse_mode: 'Markdown', 
+        reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } 
+      });
+      activeBattles.delete(chatId);
+    } 
+    // Если оба живы — переходим к следующему раунду
+    else {
+      const nextTurnPrompt = lang === 'ru' ? `\n\n Начинаем следующий раунд! Выбирай зону атаки:` : `\n\n Next round starts! Choose your attack zone:`;
+      bot.editMessageText(`${log.join('\n')}${statusReport}${nextTurnPrompt}`, {
+        chat_id: chatId, 
+        message_id: messageId, 
+        parse_mode: 'Markdown',
+        reply_markup: getAttackKeyboard(lang)
+      });
+    }
+  }
+
+  // Кнопка возврата в главное меню из любого раздела
+  if (data === 'back_to_main') {
+    activeBattles.delete(chatId); 
+    walletState.delete(chatId); 
+    const freshPlayer = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', freshPlayer ? freshPlayer.gold : 0, freshPlayer ? freshPlayer.scrap : 0, freshPlayer ? freshPlayer.plasma_cores : 0, freshPlayer ? freshPlayer.wallet_address : null), { 
+      chat_id: chatId, 
+      message_id: messageId, 
+      parse_mode: 'Markdown', 
+      reply_markup: { inline_keyboard: [ [{ text: text.btn_arena, callback_data: 'choose_weapon' }], [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }], [{ text: text.btn_wallet, callback_data: 'menu_wallet' }], [{ text: text.btn_lang, callback_data: 'toggle_language' }] ] } 
+    }).catch(() => {});
+  }
+});
