@@ -62,7 +62,6 @@ bot.on('callback_query', async (query) => {
 
   if (data === 'menu_wallet') { walletState.set(chatId, 'awaiting_wallet'); bot.editMessageText(text.wallet_menu(p?.wallet_address), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }).catch(() => {}); }
   
-  // ВЗВЕШЕННЫЙ АВТО-ФАРМ ПУСТОШЕЙ
   if (data === 'menu_wastelands') {
     walletState.delete(chatId);
     if (activeExpeditions.has(chatId)) {
@@ -75,63 +74,14 @@ bot.on('callback_query', async (query) => {
   if (data === 'start_expedition') { activeExpeditions.set(chatId, { startTime: Date.now() }); bot.editMessageText(text.farm_started, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_status, callback_data: 'menu_wastelands' }]] } }).catch(() => {}); }
   if (data === 'claim_loot') {
     const exp = activeExpeditions.get(chatId); if (!exp) return;
-    const mins = Math.floor((Date.now() - exp.startTime) / 60000); 
-    if (mins < 1) return bot.sendMessage(chatId, text.too_early); // Минимальный порог - 1 минута взвешенного сбора
-    
-    // Сбалансированный расчет добычи: 15 Золота и 30 Лома за каждую минуту похода
+    const mins = Math.floor((Date.now() - exp.startTime) / 60000); if (mins < 1) return bot.sendMessage(chatId, text.too_early);
     const gEarned = mins * 15; const sEarned = mins * 30; const isEpic = Math.random() < 0.15; const cEarned = isEpic ? 1 : 0;
     activeExpeditions.delete(chatId);
     await supabase.from('players').update({ gold: (p?.gold || 0) + gEarned, scrap: (p?.scrap || 0) + sEarned, plasma_cores: (p?.plasma_cores || 0) + cEarned }).eq('tg_id', chatId);
     bot.sendMessage(chatId, text.loot_report(gEarned, sEarned, isEpic), { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
-
-  if (data === 'choose_weapon') { walletState.delete(chatId); bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_bow' }], [{ text: text.btn_claws, callback_data: 'w_claws' }] ] } }).catch(() => {}); }
-
-  if (data === 'w_bow' || data === 'w_claws') {
-    const sw = data === 'w_bow' ? 'bow' : 'claws'; activeBattles.set(chatId, { playerHp: 100, predatorHp: 100, weapon: sw, playerAttackZone: null, weapon_dura: p?.weapon_dura || 100, armor_dura: p?.armor_dura || 100 });
-    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getAttackKeyboard(lang) });
+  if (data === 'back_to_main') {
+    activeBattles.delete(chatId); walletState.delete(chatId); const up = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', up?.gold || 0, up?.scrap || 0, up?.plasma_cores || 0, up?.wallet_address, up?.mp, up?.stamina, up?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_arena, callback_data: 'choose_weapon' }], [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }], [{ text: text.btn_wallet, callback_data: 'menu_wallet' }], [{ text: text.btn_lang, callback_data: 'toggle_language' }] ] } }).catch(() => {});
   }
-
-  if (data.startsWith('a_atk_')) {
-    const zone = data.replace('a_atk_', ''); const battle = activeBattles.get(chatId);
-    if (!battle) return bot.sendMessage(chatId, "Battle error.");
-    battle.playerAttackZone = zone;
-    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_defend_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getDefendKeyboard(lang) });
-  }
-
-  if (data.startsWith('a_def_')) {
-    const playerDefendZone = data.replace('a_def_', ''); const battle = activeBattles.get(chatId);
-    if (!battle || !battle.playerAttackZone) return bot.sendMessage(chatId, "Step error.");
-
-    const zones = Object.keys(arena.BATTLE_ZONES);
-    const predatorAttack = zones[Math.floor(Math.random() * zones.length)];
-    const predatorDefend = zones[Math.floor(Math.random() * zones.length)];
-    const wp = arena.WEAPON_BALANCING[battle.weapon];
-
-    let pDamage = 0; let predDamage = 0; let log = [];
-
-    if (battle.playerAttackZone === predatorDefend) {
-      log.push(lang === 'ru' ? `🛡 *Заблокировано!* Враг отразил удар.` : `🛡 *Blocked!* Enemy parried.`);
-      battle.weapon_dura = Math.max(0, battle.weapon_dura - 2);
-    } else {
-      pDamage = wp.directDamage; battle.weapon_dura = Math.max(0, battle.weapon_dura - 1);
-      log.push(lang === 'ru' ? `🩸 Попадание! Нанесено *-${pDamage} HP*.` : `🩸 Hit! Sustained *-${pDamage} HP*.`);
-    }
-
-    if (predatorAttack === playerDefendZone) {
-      log.push(lang === 'ru' ? `✅ *Успешный блок!* Ты отразил атаку.` : `✅ *Dodge!* Shield held.`);
-      battle.armor_dura = Math.max(0, battle.armor_dura - 1);
-    } else {
-      predDamage = 20; battle.armor_dura = Math.max(0, battle.armor_dura - 2);
-      log.push(lang === 'ru' ? `💥 Пропущено! Получено *-${predDamage} HP*.` : `💥 Failed! Damage taken *-${predDamage} HP*.`);
-    }
-
-    battle.playerHp = Math.max(0, battle.playerHp - predDamage); battle.predatorHp = Math.max(0, battle.predatorHp - pDamage); battle.playerAttackZone = null;
-    const hpBar = '█'.repeat(Math.round(battle.playerHp / 10)) + '░'.repeat(10 - Math.round(battle.playerHp / 10));
-    
-    const statusReport = lang === 'ru' 
-      ? `\n\n📊 *STATUS:* ❤️ Ты: [${hpBar}] ${battle.playerHp} HP │ 👽 Враг: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`
-      : `\n\n📊 *STATUS:* ❤️ You: [${hpBar}] ${battle.playerHp} HP │ 👽 Enemy: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`;
-
-    if (battle.predatorHp <= 0) {
-      bot.editMessageText(`${log.join('\n')}\n\n${text.arena_win}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
+});
