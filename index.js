@@ -22,7 +22,7 @@ const activeBattles = new Map();
 async function getOrCreatePlayer(tgId, username) {
   let { data: p, error } = await supabase.from('players').select('*').eq('tg_id', tgId).single();
   if (error && error.code === 'PGRST116') {
-    const { data: n } = await supabase.from('players').insert([{ tg_id: chatId, username: username, language: 'en' }]).select().single();
+    const { data: n } = await supabase.from('players').insert([{ tg_id: tgId, username: username, language: 'en' }]).select().single();
     return n;
   }
   return p;
