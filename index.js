@@ -3,6 +3,7 @@ const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
 const arena = require('./arena');
 const locales = require('./locales');
+const web3 = require('./web3');
 
 const token = process.env.TELEGRAM_TOKEN;
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -62,7 +63,7 @@ bot.on('callback_query', async (query) => {
   if (data === 'toggle_language') {
     const newLang = lang === 'ru' ? 'en' : 'ru'; await supabase.from('players').update({ language: newLang }).eq('tg_id', chatId);
     p = await getOrCreatePlayer(chatId, query.from.username || 'Warbound'); text = locales[newLang];
-    bot.editMessageText(text.welcome(query.from.username || 'Warbound', p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) }); return;
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) }).catch(() => {});
   }
   if (data === 'menu_wallet') { walletState.set(chatId, 'awaiting_wallet'); bot.editMessageText(text.wallet_menu(p?.wallet_address), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }); }
   if (data === 'menu_wastelands') {
@@ -81,7 +82,6 @@ bot.on('callback_query', async (query) => {
     activeExpeditions.delete(chatId); await supabase.from('players').update({ gold: (p?.gold || 0) + gEarned, scrap: (p?.scrap || 0) + sEarned, plasma_cores: (p?.plasma_cores || 0) + (isEpic ? 1 : 0) }).eq('tg_id', chatId);
     bot.sendMessage(chatId, text.loot_report(gEarned, sEarned, isEpic), { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
-
   if (data === 'menu_market') {
     const { data: cfg } = await supabase.from('game_config').select('value_int').eq('key', 'merchant_gold').single();
     bot.editMessageText(text.market_menu(cfg?.value_int || 0, p?.plasma_cores || 0), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_sell_mask, callback_data: 'sell_mask' }], [{ text: text.btn_menu, callback_data: 'back_to_main' }] ] } });
@@ -95,49 +95,13 @@ bot.on('callback_query', async (query) => {
     await supabase.from('game_config').update({ value_int: mGold - 500 }).eq('key', 'merchant_gold');
     bot.editMessageText(text.market_success_sell, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
-
-  if (data === 'choose_weapon') { 
-    bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ 
-      [{ text: text.btn_melee_cat, callback_data: 'cat_melee' }, { text: text.btn_throw_cat, callback_data: 'cat_throw' }] 
-    ] } }); 
+  if (data === 'choose_weapon') { bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_battle_bow' }], [{ text: text.btn_claws, callback_data: 'w_battle_claws' }] ] } }); }
+  if (data === 'w_battle_bow' || data === 'w_battle_claws') {
+    await supabase.from('players').update({ plasma_cores: (p?.plasma_cores || 0) + 1 }).eq('tg_id', chatId);
+    bot.editMessageText(text.arena_win + "\n\n*Трофей 🎭 Hunter Mask добавлен в твой инвентарь!*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
-  if (data === 'cat_melee') {
-    bot.editMessageText(lang === 'ru' ? "⚔️ *ВЫБЕРИ КЛИНКОВОЕ ОРУЖИЕ:*" : "⚔️ *SELECT MELEE GEAR:*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "⚔️ Ritual Blades", callback_data: 'w_blades' }, { text: "⚔️ Officer Saber", callback_data: 'w_saber' }],
-      [{ text: "⚔️ Heavy Sword", callback_data: 'w_sword' }, { text: "🔪 Tactical Knife", callback_data: 'w_knife' }]
-    ] } });
+  if (data === 'back_to_main') {
+    const up = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', up?.gold || 0, up?.scrap || 0, up?.plasma_cores || 0, up?.wallet_address, up?.mp, up?.stamina, up?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) });
   }
-  if (data === 'cat_throw') {
-    bot.editMessageText(lang === 'ru' ? "💣 *ВЫБЕРИ МЕТАТЕЛЬНЫЙ АРСЕНАЛ:*" : "💣 *SELECT THROWABLE GEAR:*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [
-      [{ text: "🎯 Throwing Knives", callback_data: 'w_th_knives' }, { text: "🪓 Combat Axes", callback_data: 'w_axes' }],
-      [{ text: "⭐ Steel Stars", callback_data: 'w_stars' }, { text: "💣 Targeted Explosive", callback_data: 'w_explosives' }]
-    ] } });
-  }
-
-  if (data.startsWith('w_')) {
-    const selectedWp = data.replace('w_', '');
-    activeBattles.set(chatId, { playerHp: 100, predatorHp: 100, weapon: selectedWp, playerAttackZone: null, weapon_dura: 100, armor_dura: 100 });
-    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getAttackKeyboard(lang) });
-  }
-
-  if (data.startsWith('a_atk_')) {
-    const zone = data.replace('a_atk_', ''); const battle = activeBattles.get(chatId);
-    if (!battle) return bot.sendMessage(chatId, "Battle error.");
-    battle.playerAttackZone = zone;
-    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_defend_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getDefendKeyboard(lang) });
-  }
-
-  if (data.startsWith('a_def_')) {
-    const playerDefendZone = data.replace('a_def_', ''); const battle = activeBattles.get(chatId);
-    if (!battle || !battle.playerAttackZone) return bot.sendMessage(chatId, "Step error.");
-
-    // Вызываем изолированный боевой расчет из файла arena.js
-    const turnResult = arena.runBattleTurn(battle, playerDefendZone, lang);
-    const hpBar = '█'.repeat(Math.round(battle.playerHp / 10)) + '░'.repeat(10 - Math.round(battle.playerHp / 10));
-    
-    const statusReport = lang === 'ru' 
-      ? `\n\n📊 *STATUS:* ❤️ Ты: [${hpBar}] ${battle.playerHp} HP │ 👽 Враг: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`
-      : `\n\n📊 *STATUS:* ❤️ You: [${hpBar}] ${battle.playerHp} HP │ 👽 Enemy: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`;
-
-    if (battle.predatorHp <= 0) {
-      let kbd = [[{ text: text.btn_menu, callback_data: 'back_to_main' }]];
+});
