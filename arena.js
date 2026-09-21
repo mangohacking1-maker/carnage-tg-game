@@ -1,6 +1,15 @@
 const WEAPON_BALANCING = {
-  bow: { name_ru: "Композитный Лук [Яд]", name_en: "Compound Bow [Poison]", directDamage: 15, poisonDamage: 8, poisonDuration: 3 },
-  claws: { name_ru: "Энергетические Когти [Урон]", name_en: "Energy Claws [Damage]", directDamage: 30, critChance: 0.35, critMultiplier: 1.5 }
+  // Ближний бой (Melee)
+  blades: { name_ru: "⚔️ Ритуальные Клинки", name_en: "⚔️ Ritual Blades", directDamage: 25, critChance: 0.20, critMultiplier: 1.4 },
+  saber: { name_ru: "⚔️ Офицерская Сабля", name_en: "⚔️ Officer Saber", directDamage: 28, critChance: 0.15, critMultiplier: 1.5 },
+  sword: { name_ru: "⚔️ Тяжелый Меч", name_en: "⚔️ Heavy Sword", directDamage: 35, critChance: 0.10, critMultiplier: 1.6 },
+  knife: { name_ru: "🔪 Тактический Нож", name_en: "🔪 Tactical Knife", directDamage: 18, critChance: 0.40, critMultiplier: 1.5 },
+  
+  // Метательное (Throwables)
+  th_knives: { name_ru: "🎯 Метательные Ножи", name_en: "🎯 Throwing Knives", directDamage: 20, critChance: 0.30, critMultiplier: 1.3 },
+  axes: { name_ru: "🪓 Боевые Топоры", name_en: "🪓 Combat Axes", directDamage: 32, critChance: 0.12, critMultiplier: 1.5 },
+  stars: { name_ru: "⭐ Стальные Звездочки", name_en: "⭐ Steel Stars", directDamage: 15, critChance: 0.50, critMultiplier: 1.4 },
+  explosives: { name_ru: "💣 Направленная Взрывчатка", name_en: "💣 Targeted Explosive", directDamage: 45, critChance: 0.05, critMultiplier: 2.0 }
 };
 
 const BATTLE_ZONES = {
@@ -10,18 +19,6 @@ const BATTLE_ZONES = {
   legs: { ru: "🦿 Ноги (Legs)", en: "🦿 Legs" }
 };
 
-function calculateLimbDamage(limbs, zone, dm) {
-  let cur = { ...limbs }; let log = ""; if (dm <= 0) return { cur, log };
-  if (zone === 'legs') {
-    if (Math.random() < 0.5) { cur.limb_left_leg = Math.max(0, cur.limb_left_leg - 8); log = "\n🩸 L. Leg injured!"; }
-    else { cur.limb_right_leg = Math.max(0, cur.limb_right_leg - 8); log = "\n🩸 R. Leg injured!"; }
-  } else if (zone === 'chest' || zone === 'belt') {
-    if (Math.random() < 0.5) { cur.limb_left_hand = Math.max(0, cur.limb_left_hand - 8); log = "\n🩸 L. Hand injured!"; }
-    else { cur.limb_right_hand = Math.max(0, cur.limb_right_hand - 8); log = "\n🩸 R. Hand injured!"; }
-  }
-  return { cur, log };
-}
-
 function getAttackKeyboard(lang) {
   return { inline_keyboard: Object.keys(BATTLE_ZONES).map(z => [{ text: `⚔️ ${BATTLE_ZONES[z][lang]}`, callback_data: `a_atk_${z}` }]) };
 }
@@ -30,4 +27,4 @@ function getDefendKeyboard(lang) {
   return { inline_keyboard: Object.keys(BATTLE_ZONES).map(z => [{ text: `🛡 ${BATTLE_ZONES[z][lang]}`, callback_data: `a_def_${z}` }]) };
 }
 
-module.exports = { WEAPON_BALANCING, BATTLE_ZONES, getAttackKeyboard, getDefendKeyboard, calculateLimbDamage };
+module.exports = { WEAPON_BALANCING, BATTLE_ZONES, getAttackKeyboard, getDefendKeyboard };
