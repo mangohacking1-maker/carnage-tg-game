@@ -85,7 +85,7 @@ bot.on('callback_query', async (query) => {
     bot.sendMessage(chatId, text.loot_report(goldEarned, scrapEarned, isEpic), { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
 
-  if (data === 'choose_weapon') { walletState.delete(chatId); bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: locales[lang].btn_bow, callback_data: 'w_bow' }], [{ text: locales[lang].btn_claws, callback_data: 'w_claws' }] ] } }).catch(() => {}); }
+  if (data === 'choose_weapon') { walletState.delete(chatId); bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_bow' }], [{ text: text.btn_claws, callback_data: 'w_claws' }] ] } }).catch(() => {}); }
 
   if (data === 'w_bow' || data === 'w_claws') {
     const sw = data === 'w_bow' ? 'bow' : 'claws'; activeBattles.set(chatId, { playerHp: 100, predatorHp: 100, weapon: sw, playerAttackZone: null });
@@ -137,3 +137,17 @@ bot.on('callback_query', async (query) => {
     battle.playerHp = Math.max(0, battle.playerHp - predDamage); battle.predatorHp = Math.max(0, battle.predatorHp - pDamage); battle.playerAttackZone = null;
     const statusReport = lang === 'ru' ? `\n\n📊 *СТАТУС:* ❤️ Ты: *${battle.playerHp} HP* | 👽 Враг: *${battle.predatorHp} HP*` : `\n\n📊 *STATUS:* ❤️ You: *${battle.playerHp} HP* | 👽 Enemy: *${battle.predatorHp} HP*`;
 
+    if (battle.predatorHp <= 0) {
+      bot.editMessageText(`${log.join('\n')}\n\n${text.arena_win}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }); activeBattles.delete(chatId);
+    } else if (battle.playerHp <= 0) {
+      bot.editMessageText(`${log.join('\n')}\n\n${text.arena_lose}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }); activeBattles.delete(chatId);
+    } else {
+      bot.editMessageText(`${log.join('\n')}${statusReport}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getAttackKeyboard(lang) });
+    }
+  }
+
+  if (data === 'back_to_main') {
+    activeBattles.delete(chatId); walletState.delete(chatId); const freshPlayer = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', freshPlayer ? freshPlayer.gold : 0, freshPlayer ? freshPlayer.scrap : 0, freshPlayer ? freshPlayer.plasma_cores : 0, freshPlayer ? freshPlayer.wallet_address : null), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_arena, callback_data: 'choose_weapon' }], [{ text: text.btn_wastelands, callback_data: 'menu_wastelands' }], [{ text: text.btn_wallet, callback_data: 'menu_wallet' }], [{ text: text.btn_lang, callback_data: 'toggle_language' }] ] } }).catch(() => {});
+  }
+});

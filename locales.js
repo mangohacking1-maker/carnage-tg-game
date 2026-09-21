@@ -1,5 +1,3 @@
-const arena = require('./arena');
-
 const locales = {
   ru: {
     welcome: (name, gold, scrap, cores, wallet) => {
@@ -13,7 +11,7 @@ const locales = {
     btn_claim: "🎒 Собрать добычу", btn_start_farm: "🚀 Запустить авто-фарм", btn_status: "📊 Статус", farm_started: "🚀 *Фарм запущен!*", too_early: "⏳ Рано еще!",
     loot_report: (g, s, e) => `🎒 *ДОБЫЧА ИЗ ПУСТОШЕЙ:* \n💰 Золото: *+\${g}*\n⚙️ Металлолом: *+s*{e ? '\n🔥 Найдено *⚡ Plasma Core Яутжа*!' : ''}`,
     choose_weapon: "⚔️ *ВЫБЕРИ СНАРЯЖЕНИЕ ДЛЯ АРЕНЫ:*", btn_bow: "🏹 Лук (Пенчак Силат) [Яд]", btn_claws: "🩸 Когти (Вин Чун) [Урон]",
-    wallet_menu: (w) => w ? `💎 *ТВОЙ TON КОШЕЛЕК:* \n\`${w}\`` : '💎 *CONNECT TON WALLET* \n\nОтправь мне адрес своего TON кошелька.',
+    wallet_menu: (w) => w ? `💎 *ТВОЙ TON КОШЕЛЕК:* \n\`${w}\`` : '💎 *ПОДКЛЮЧЕНИЕ TON КОШЕЛЬКА* \n\nОтправь мне адрес своего TON кошелька.',
     wallet_success: "✅ *Успех!* Твой TON кошелек привязан!", wallet_invalid: "❌ *Ошибка!* Неверный формат TON адреса.",
     arena_intro: "🛸 Перед тобой свирепый Хищник Яутжа (100 HP).\n\n*ВЫБЕРИ ЗОНУ ДЛЯ УДАРА:*",
     arena_defend_intro: "🎯 Цель зафиксирована!\n*ТЕПЕРЬ УСТАНОВИ БЛОК ДЛЯ ЗАЩИТЫ:*",
@@ -31,7 +29,7 @@ const locales = {
     btn_claim: "🎒 Claim Loot", btn_start_farm: "🚀 Start Auto-Farm", btn_status: "📊 Status", farm_started: "🚀 *Farming Started!*", too_early: "⏳ Too early!",
     loot_report: (g, s, e) => `🎒 *WASTELANDS LOOT:* \n💰 Gold: *+\${g}*\n⚙️ Scrap: *+s*{e ? '\n🔥 Found *⚡ Yautja Plasma Core*!' : ''}`,
     choose_weapon: "⚔️ *SELECT YOUR GEAR:*", btn_bow: "🏹 Bow (Pencak Silat) [Poison]", btn_claws: "🩸 Claws (Wing Chun) [Damage]",
-    wallet_menu: (w) => w? `💎 *YOUR TON WALLET:* \n\`${w}\`` : '💎 *CONNECT TON WALLET* \n\nSend your TON wallet address.',
+    wallet_menu: (w) => w ? `💎 *YOUR TON WALLET:* \n\`${w}\`` : '💎 *CONNECT TON WALLET* \n\nSend your TON wallet address.',
     wallet_success: "✅ *Success!* Wallet linked!", wallet_invalid: "❌ *Error!* Invalid TON address.",
     arena_intro: "🛸 A fierce Predator stands before you (100 HP).\n\n*CHOOSE YOUR TARGET ZONE:*",
     arena_defend_intro: "🎯 Target locked!\n*NOW CHOOSE YOUR DEFENSE ZONE:*",
