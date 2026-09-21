@@ -28,7 +28,6 @@ async function getOrCreatePlayer(tgId, username) {
   return p;
 }
 
-// Умная клавиатура: кнопки генерируются строго под выбранный язык игрока
 function getMainMenuKeyboard(text) {
   return { inline_keyboard: [ 
     [{ text: text.btn_arena, callback_data: 'choose_weapon' }], 
@@ -60,16 +59,11 @@ bot.on('callback_query', async (query) => {
   let p = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
   let lang = p?.language || 'ru'; let text = locales[lang];
 
-  // Железный двухсторонний переключатель языков
   if (data === 'toggle_language') {
-    const newLang = lang === 'ru' ? 'en' : 'ru'; 
-    await supabase.from('players').update({ language: newLang }).eq('tg_id', chatId);
-    p = await getOrCreatePlayer(chatId, query.from.username || 'Warbound'); 
-    text = locales[newLang];
-    bot.editMessageText(text.welcome(query.from.username || 'Warbound', p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) }).catch(() => {});
-    return;
+    const newLang = lang === 'ru' ? 'en' : 'ru'; await supabase.from('players').update({ language: newLang }).eq('tg_id', chatId);
+    p = await getOrCreatePlayer(chatId, query.from.username || 'Warbound'); text = locales[newLang];
+    bot.editMessageText(text.welcome(query.from.username || 'Warbound', p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) }); return;
   }
-  
   if (data === 'menu_wallet') { walletState.set(chatId, 'awaiting_wallet'); bot.editMessageText(text.wallet_menu(p?.wallet_address), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }); }
   if (data === 'menu_wastelands') {
     if (activeExpeditions.has(chatId)) {
@@ -137,15 +131,13 @@ bot.on('callback_query', async (query) => {
     const playerDefendZone = data.replace('a_def_', ''); const battle = activeBattles.get(chatId);
     if (!battle || !battle.playerAttackZone) return bot.sendMessage(chatId, "Step error.");
 
-    const zones = Object.keys(arena.BATTLE_ZONES);
-    const predatorAttack = zones[Math.floor(Math.random() * zones.length)];
-    const predatorDefend = zones[Math.floor(Math.random() * zones.length)];
-    const wp = arena.WEAPON_BALANCING[battle.weapon];
+    // Вызываем изолированный боевой расчет из файла arena.js
+    const turnResult = arena.runBattleTurn(battle, playerDefendZone, lang);
+    const hpBar = '█'.repeat(Math.round(battle.playerHp / 10)) + '░'.repeat(10 - Math.round(battle.playerHp / 10));
+    
+    const statusReport = lang === 'ru' 
+      ? `\n\n📊 *STATUS:* ❤️ Ты: [${hpBar}] ${battle.playerHp} HP │ 👽 Враг: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`
+      : `\n\n📊 *STATUS:* ❤️ You: [${hpBar}] ${battle.playerHp} HP │ 👽 Enemy: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`;
 
-    let pDamage = 0; let predDamage = 0; let log = [];
-
-    if (battle.playerAttackZone === predatorDefend) {
-      log.push(lang === 'ru' ? `🛡 *Заблокировано!* Враг отразил удар.` : `🛡 *Blocked!* Enemy parried.`);
-      battle.weapon_dura = Math.max(0, battle.weapon_dura - 2);
-    } else {
-      pDamage = wp.directDamage; battle.weapon_dura = Math.max(0, battle.weapon_dura - 1);
+    if (battle.predatorHp <= 0) {
+      let kbd = [[{ text: text.btn_menu, callback_data: 'back_to_main' }]];
