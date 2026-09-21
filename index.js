@@ -17,6 +17,16 @@ http.createServer((req, res) => { res.writeHead(200); res.end('Active'); }).list
 const bot = new TelegramBot(token, { polling: true });
 const activeExpeditions = new Map();
 const walletState = new Map();
+const activeBattles = new Map();
+
+async function getOrCreatePlayer(tgId, username) {
+  let { data: p, error } = await supabase.from('players').select('*').eq('tg_id', tgId).single();
+  if (error && error.code === 'PGRST116') {
+    const { data: n } = await supabase.from('players').insert([{ tg_id: chatId, username: username, language: 'en' }]).select().single();
+    return n;
+  }
+  return p;
+}
 
 function getMainMenuKeyboard(text) {
   return { inline_keyboard: [ 
@@ -37,20 +47,15 @@ bot.on('message', async (msg) => {
 
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id; const username = msg.from.username || 'Warbound';
-  walletState.delete(chatId);
-  let { data: p } = await supabase.from('players').select('*').eq('tg_id', chatId).single();
-  if (!p) {
-    const { data: n } = await supabase.from('players').insert([{ tg_id: chatId, username: username, language: 'en' }]).select().single();
-    p = n;
-  }
-  const text = locales.en;
+  activeBattles.delete(chatId); walletState.delete(chatId);
+  const p = await getOrCreatePlayer(chatId, username); const text = locales.en;
   bot.sendMessage(chatId, text.welcome(username, p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) });
 });
 
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id; const messageId = query.message.message_id; const data = query.data;
   bot.answerCallbackQuery(query.id).catch(() => {});
-  let { data: p } = await supabase.from('players').select('*').eq('tg_id', chatId).single();
+  let p = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
   let text = locales.en;
 
   if (data === 'menu_wallet') { walletState.set(chatId, 'awaiting_wallet'); bot.editMessageText(text.wallet_menu(p?.wallet_address), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } }); }
@@ -70,6 +75,8 @@ bot.on('callback_query', async (query) => {
     activeExpeditions.delete(chatId); await supabase.from('players').update({ gold: (p?.gold || 0) + gEarned, scrap: (p?.scrap || 0) + sEarned, plasma_cores: (p?.plasma_cores || 0) + (isEpic ? 1 : 0) }).eq('tg_id', chatId);
     bot.sendMessage(chatId, text.loot_report(gEarned, sEarned, isEpic), { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
+
+  // РЫНОК С ОГРАНИЧЕННОЙ КАЗНОЙ NPC
   if (data === 'menu_market') {
     const { data: cfg } = await supabase.from('game_config').select('value_int').eq('key', 'merchant_gold').single();
     bot.editMessageText(text.market_menu(cfg?.value_int || 0, p?.plasma_cores || 0), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_sell_mask, callback_data: 'sell_mask' }], [{ text: text.btn_menu, callback_data: 'back_to_main' }] ] } });
@@ -83,17 +90,40 @@ bot.on('callback_query', async (query) => {
     await supabase.from('game_config').update({ value_int: mGold - 500 }).eq('key', 'merchant_gold');
     bot.editMessageText(text.market_success_sell, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
-  if (data === 'choose_weapon') { bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_battle_bow' }], [{ text: text.btn_claws, callback_data: 'w_battle_claws' }] ] } }); }
-  if (data === 'w_battle_bow' || data === 'w_battle_claws') {
-    let kbd = [[{ text: text.btn_menu, callback_data: 'back_to_main' }]];
-    if (p?.wallet_address) {
-      kbd.unshift([{ text: "💎 Mint NFT to Tonkeeper", url: "ton://transfer/8916759686?amount=50000000&text=mask_v1" }]);
+
+  // СЕТКА ОРУЖИЯ (АТАКА/ЗАЩИТА И РАУНДЫ БОЯ)
+  if (data === 'choose_weapon') { bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_blades' }], [{ text: text.btn_claws, callback_data: 'w_explosives' }] ] } }); }
+  if (data.startsWith('w_')) {
+    const selectedWp = data.replace('w_', '');
+    activeBattles.set(chatId, { playerHp: 100, predatorHp: 100, weapon: selectedWp, playerAttackZone: null, weapon_dura: 100, armor_dura: 100 });
+    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getAttackKeyboard('en') });
+  }
+  if (data.startsWith('a_atk_')) {
+    const zone = data.replace('a_atk_', ''); const battle = activeBattles.get(chatId); if (!battle) return;
+    battle.playerAttackZone = zone;
+    bot.editMessageText(`⚜️ *ARENA v3.9*\n\n${text.arena_defend_intro}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getDefendKeyboard('en') });
+  }
+  if (data.startsWith('a_def_')) {
+    const playerDefendZone = data.replace('a_def_', ''); const battle = activeBattles.get(chatId); if (!battle) return;
+    const turnResult = arena.runBattleTurn(battle, playerDefendZone, 'en');
+    const hpBar = '█'.repeat(Math.round(battle.playerHp / 10)) + '░'.repeat(10 - Math.round(battle.playerHp / 10));
+    const statusReport = `\n\n📊 *STATUS:* ❤️ You: [${hpBar}] ${battle.playerHp} HP │ 👽 Enemy: ${battle.predatorHp} HP\n\n🎒 *GEAR DURA:*\n🏹 Weapon: ${battle.weapon_dura}% │ 🛡️ Armor: ${battle.armor_dura}%`;
+
+    if (battle.predatorHp <= 0) {
+      let kbd = [[{ text: text.btn_menu, callback_data: 'back_to_main' }]];
+      if (p?.wallet_address) kbd.unshift([{ text: "💎 Mint NFT to Tonkeeper", url: "ton://transfer/8916759686?amount=50000000&text=mask_v1" }]);
+      await supabase.from('players').update({ plasma_cores: (p?.plasma_cores || 0) + 1 }).eq('tg_id', chatId);
+      bot.editMessageText(`${turnResult.log}\n\n${text.arena_win}\n\n*Trophy 🎭 Hunter Mask added!*`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: kbd } });
+      activeBattles.delete(chatId);
+    } else if (battle.playerHp <= 0) {
+      bot.editMessageText(`${turnResult.log}\n\n${text.arena_lose}`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
+      activeBattles.delete(chatId);
+    } else {
+      bot.editMessageText(`${turnResult.log}${statusReport}\n\n🛸 *Choose your next attack target zone:*`, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: arena.getAttackKeyboard('en') });
     }
-    await supabase.from('players').update({ plasma_cores: (p?.plasma_cores || 0) + 1 }).eq('tg_id', chatId);
-    bot.editMessageText(text.arena_win + "\n\n*Trophy 🎭 Hunter Mask added to session inventory!*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: kbd } });
   }
   if (data === 'back_to_main') {
-    let { data: up } = await supabase.from('players').select('*').eq('tg_id', chatId).single();
+    const up = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
     bot.editMessageText(text.welcome(query.from.username || 'Warbound', up?.gold || 0, up?.scrap || 0, up?.plasma_cores || 0, up?.wallet_address, up?.mp, up?.stamina, up?.marsel_diamonds), { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) });
   }
 });
