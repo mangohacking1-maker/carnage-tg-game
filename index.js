@@ -4,21 +4,28 @@ import { createClient } from '@supabase/supabase-js';
 import text from './locales.js';
 import { sellPlasmaCore, upgradeSharpness, processIdleExpedition } from './arena.js';
 
-// Инициализация бота и Supabase
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: true });
+// Инициализация бота с жестким сбросом конкурирующих сессий
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { 
+  polling: {
+    autoStart: true,
+    params: {
+      // Этот флаг заставляет Telegram принудительно закрыть старый getUpdates и очистить очередь
+      drop_pending_updates: true 
+    }
+  }
+});
+
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
 
 // Главная функция отрисовки меню
 async function sendMainMenu(chatId, username) {
   try {
-    // 1. Извлекаем данные игрока из Supabase
     let { data: player, error } = await supabase
       .from('players')
       .select('*')
       .eq('tg_id', username)
       .single();
 
-    // Если игрока нет в базе — создаем стартовую запись
     if (error || !player) {
       const { data: newPlayer } = await supabase
         .from('players')
@@ -37,18 +44,15 @@ async function sendMainMenu(chatId, username) {
       player = newPlayer;
     }
 
-    // 2. Рассчитываем пассивный доход за время отсутствия (если запущен поиск лута)
     if (player && player.expedition_start) {
       player = await processIdleExpedition(player);
     }
 
-    // Safe-fallback переменные для предотвращения undefined
     const gold = player?.gold ?? 0;
     const scrap = player?.scrap ?? 0;
     const cores = player?.plasma_cores ?? 0;
     const diamonds = player?.marsel_diamonds ?? 0;
 
-    // Генерируем клавиатуру управления
     const keyboard = {
       inline_keyboard: [
         [{ text: "⚔️ В бой на Арену", callback_data: "action_arena" }],
@@ -57,7 +61,6 @@ async function sendMainMenu(chatId, username) {
       ]
     };
 
-    // Безопасный вызов локализации (Строка 52 полностью защищена)
     const messageText = text && typeof text.welcome === 'function'
       ? text.welcome(username, gold, scrap, cores, diamonds)
       : `╔═════════════════════════════════════════╗\n║          💎 ARENA OF HONOR v2.0         ║\n╠═════════════════════════════════════════╣\n║  👤 ВОИН: @${username}\n║  💰 Золото: ${gold} ┃ 🛠️ Скрап: ${scrap}\n╚═════════════════════════════════════════╝`;
@@ -73,7 +76,7 @@ async function sendMainMenu(chatId, username) {
   }
 }
 
-// Слушатель текстовых команд (/start и текстовое Меню)
+// Слушатель текстовых команд
 bot.on('message', (msg) => {
   if (!msg.text) return;
   const chatId = msg.chat.id;
@@ -84,7 +87,7 @@ bot.on('message', (msg) => {
   }
 });
 
-// Слушатель нажатий на кнопки (Callback Queries)
+// Слушатель нажатий на кнопки
 bot.on('callback_query', async (callbackQuery) => {
   const chatId = callbackQuery.message.chat.id;
   const username = callbackQuery.from.username || callbackQuery.from.id.toString();
@@ -92,11 +95,8 @@ bot.on('callback_query', async (callbackQuery) => {
 
   try {
     if (data === "action_market") {
-      // Получаем ликвидность купца из game_config
       const { data: config } = await supabase.from('game_config').select('value_int').eq('key', 'merchant_gold').single();
       const merchantGold = config?.value_int ?? 5000;
-
-      // Получаем данные игрока для отображения в лавке
       const { data: player } = await supabase.from('players').select('*').eq('tg_id', username).single();
 
       const marketKeyboard = {
@@ -138,7 +138,6 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 
     if (data === "action_expedition") {
-      // Переключаем игрока в режим экспедиции, фиксируя время старта
       const nowISO = new Date().toISOString();
       await supabase.from('players').update({ expedition_start: nowISO }).eq('tg_id', username);
       
@@ -149,7 +148,6 @@ bot.on('callback_query', async (callbackQuery) => {
     }
 
     if (data === "action_arena") {
-      // Имитация быстрой схватки на арене
       let droppedCore = Math.random() <= 0.15;
       if (droppedCore) {
         const { data: player } = await supabase.from('players').select('plasma_cores').eq('tg_id', username).single();
@@ -171,4 +169,4 @@ bot.on('callback_query', async (callbackQuery) => {
   }
 });
 
-console.log("🚀 Эфир чистый. Роутер ARENA OF HONOR v2.0 запущен и слушает Telegram...");
+console.log("🚀 Эфир чистый. Роутер ARENA OF HONOR v2.0 принудительно перехватил управление...");
