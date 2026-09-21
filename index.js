@@ -85,7 +85,7 @@ bot.on('callback_query', async (query) => {
     bot.sendMessage(chatId, text.loot_report(goldEarned, scrapEarned, isEpic), { parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
   }
 
-  if (data === 'choose_weapon') { walletState.delete(chatId); bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_bow' }], [{ text: text.btn_claws, callback_data: 'w_claws' }] ] } }).catch(() => {}); }
+  if (data === 'choose_weapon') { walletState.delete(chatId); bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: locales[lang].btn_bow, callback_data: 'w_bow' }], [{ text: locales[lang].btn_claws, callback_data: 'w_claws' }] ] } }).catch(() => {}); }
 
   if (data === 'w_bow' || data === 'w_claws') {
     const sw = data === 'w_bow' ? 'bow' : 'claws'; activeBattles.set(chatId, { playerHp: 100, predatorHp: 100, weapon: sw, playerAttackZone: null });
@@ -111,7 +111,7 @@ bot.on('callback_query', async (query) => {
     let pDamage = 0; let predDamage = 0; let log = [];
 
     log.push(lang === 'ru' ? `*⚔️ ТВОЙ ХОД:* Ты бьешь в *${arena.BATTLE_ZONES[battle.playerAttackZone].ru}*` : `*⚔️ YOUR TURN:* You strike *${arena.BATTLE_ZONES[battle.playerAttackZone].en}*`);
-    log.push(lang === 'ru' ? `🛸 Хищник блок на *${arena.BATTLE_ZONES[predatorDefend].ru}*` : `🛸 Predator blocked *${arena.BATTLE_ZONES[predatorDefend].en}*`);
+    log.push(lang === 'ru' ? `🛸 Враг блок на *${arena.BATTLE_ZONES[predatorDefend].ru}*` : `🛸 Enemy blocked *${arena.BATTLE_ZONES[predatorDefend].en}*`);
 
     if (battle.playerAttackZone === predatorDefend) {
       log.push(lang === 'ru' ? `🛡 *Заблокировано!*` : `🛡 *Blocked!*`);
@@ -119,7 +119,7 @@ bot.on('callback_query', async (query) => {
       pDamage = wp.directDamage;
       if (battle.weapon === 'claws' && battle.playerAttackZone === 'head' && Math.random() < wp.critChance) {
         pDamage = Math.round(pDamage * wp.critMultiplier);
-        log.push(lang === 'ru' ? `💥 *КРИТ!* Когти Вин Чун вскрывают Head на *-${pDamage} HP*!` : `💥 *CRIT!* Claws rip Head for *-${pDamage} HP*!`);
+        log.push(lang === 'ru' ? `💥 *КРИТ!* Когти вскрывают Head на *-${pDamage} HP*!` : `💥 *CRIT!* Claws rip Head for *-${pDamage} HP*!`);
       } else {
         log.push(lang === 'ru' ? `🩸 Попадание! Нанесено *-${pDamage} HP*.` : `🩸 Hit! Sustained *-${pDamage} HP*.`);
       }
