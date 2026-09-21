@@ -129,9 +129,7 @@ bot.on('callback_query', async (query) => {
       predDamage = 20; battle.armor_dura = Math.max(0, battle.armor_dura - 2);
       log.push(lang === 'ru' ? `💥 Пропущено! Получено *-${predDamage} HP*.` : `💥 Failed! Damage taken *-${predDamage} HP*.`);
       
-      const limbResult = arena.calculateLimbDamage(battle.limbs, playerDefendZone, predDamage);
-      battle.limbs = limbResult.cur;
-      if (limbResult.log) log.push(limbResult.log);
+
     }
 
     battle.playerHp = Math.max(0, battle.playerHp - predDamage);
