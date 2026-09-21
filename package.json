@@ -1,16 +1,19 @@
 {
-  "name": "arena-of-honor-bot",
+  "name": "arena-of-honor-v2",
   "version": "2.0.0",
-  "description": "Arena of Honor Engine with Web3 TON SDK",
+  "description": "Arena of Honor v2.0 Core Backend",
   "main": "index.js",
+  "type": "module",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "node-telegram-bot-api": "^0.66.0",
+    "telegram-bot-api": "^2.0.1",
     "@supabase/supabase-js": "^2.45.4",
     "@ton/ton": "^13.11.1",
-    "@ton/core": "^0.53.0",
-    "@ton/crypto": "^3.2.0"
+    "@ton/core": "^0.53.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
   }
 }
