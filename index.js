@@ -3,7 +3,6 @@ const http = require('http');
 const { createClient } = require('@supabase/supabase-js');
 const arena = require('./arena');
 const locales = require('./locales');
-const web3 = require('./web3');
 
 const token = process.env.TELEGRAM_TOKEN;
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -18,7 +17,6 @@ http.createServer((req, res) => { res.writeHead(200); res.end('Active'); }).list
 const bot = new TelegramBot(token, { polling: true });
 const activeExpeditions = new Map();
 const walletState = new Map();
-const activeBattles = new Map();
 
 async function getOrCreatePlayer(tgId, username) {
   let { data: p, error } = await supabase.from('players').select('*').eq('tg_id', tgId).single();
@@ -49,7 +47,7 @@ bot.on('message', async (msg) => {
 
 bot.onText(/\/start/, async (msg) => {
   const chatId = msg.chat.id; const username = msg.from.username || 'Warbound';
-  activeBattles.delete(chatId); walletState.delete(chatId);
+  walletState.delete(chatId);
   const p = await getOrCreatePlayer(chatId, username); const lang = p?.language || 'ru'; const text = locales[lang];
   bot.sendMessage(chatId, text.welcome(username, p?.gold || 0, p?.scrap || 0, p?.plasma_cores || 0, p?.wallet_address, p?.mp, p?.stamina, p?.marsel_diamonds), { parse_mode: 'Markdown', reply_markup: getMainMenuKeyboard(text) });
 });
@@ -97,8 +95,12 @@ bot.on('callback_query', async (query) => {
   }
   if (data === 'choose_weapon') { bot.editMessageText(text.choose_weapon, { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [ [{ text: text.btn_bow, callback_data: 'w_battle_bow' }], [{ text: text.btn_claws, callback_data: 'w_battle_claws' }] ] } }); }
   if (data === 'w_battle_bow' || data === 'w_battle_claws') {
+    let kbd = [[{ text: text.btn_menu, callback_data: 'back_to_main' }]];
+    if (p?.wallet_address) {
+      kbd.unshift([{ text: "💎 Mint NFT to Tonkeeper", url: "ton://transfer/EQA_ArenaOfHonor_MasterContract_Placeholder_XYZ?amount=50000000&text=mask_v1" }]);
+    }
     await supabase.from('players').update({ plasma_cores: (p?.plasma_cores || 0) + 1 }).eq('tg_id', chatId);
-    bot.editMessageText(text.arena_win + "\n\n*Трофей 🎭 Hunter Mask добавлен в твой инвентарь!*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: [[{ text: text.btn_menu, callback_data: 'back_to_main' }]] } });
+    bot.editMessageText(text.arena_win + "\n\n*Трофей 🎭 Hunter Mask добавлен в твой инвентарь!*", { chat_id: chatId, message_id: messageId, parse_mode: 'Markdown', reply_markup: { inline_keyboard: kbd } });
   }
   if (data === 'back_to_main') {
     const up = await getOrCreatePlayer(chatId, query.from.username || 'Warbound');
