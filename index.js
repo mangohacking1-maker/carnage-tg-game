@@ -1,13 +1,28 @@
-// index.js - ЧАСТЬ 1: ИМПОРТЫ И КОНФИГ
+// index.js - ЧАСТЬ 1: ИМПОРТЫ И ЖЕСТКИЙ СБРОС КОНФЛИКТОВ
 import TelegramBot from 'node-telegram-bot-api';
 import { createClient } from '@supabase/supabase-js';
 import text from './locales.js';
 import { sellPlasmaCore, upgradeSharpness, processIdleExpedition } from './arena.js';
 
-const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { 
-  polling: { autoStart: true, params: { drop_pending_updates: true } } 
-});
+// Создаем инстанс БЕЗ автоматического старта
+const bot = new TelegramBot(process.env.TELEGRAM_TOKEN, { polling: false });
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY);
+
+// Жестко выбиваем призраков из сети перед запуском
+async function initBot() {
+  try {
+    console.log("⏳ Зачистка старых сессий...");
+    await bot.deleteWebhook({ drop_pending_updates: true }); 
+    await new Promise(resolve => setTimeout(resolve, 3000)); 
+    await bot.startPolling({ restart: true, params: { drop_pending_updates: true } });
+    console.log("🚀 Эфир чистый. ARENA v2.0 принудительно перехватила управление!");
+  } catch (err) {
+    console.error("Ошибка очистки сети:", err);
+  }
+}
+
+initBot();
+
 // ЧАСТЬ 2: ГЛАВНОЕ МЕНЮ
 async function sendMainMenu(chatId, username) {
   try {
